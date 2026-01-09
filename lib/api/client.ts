@@ -13,6 +13,13 @@ import type {
   UserRanking,
   AuthVerify,
   RoundStatus,
+  MarketDataStatus,
+  MarketDataset,
+  MarketDataFetchRequest,
+  MarketDataFetchResponse,
+  MarketDataStats,
+  MarketApiStatus,
+  MarketDataDeleteResponse,
 } from '@/lib/types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -189,6 +196,38 @@ export const leaderboard = {
     ),
 }
 
+// Market Data API
+export const marketData = {
+  getStatus: () => 
+    apiCall<MarketDataStatus>('/api/market-data/status'),
+
+  fetch: (data: MarketDataFetchRequest) =>
+    apiCall<MarketDataFetchResponse>('/api/market-data/fetch', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getDatasets: (symbol?: string) => {
+    const params = new URLSearchParams()
+    if (symbol) params.append('symbol', symbol)
+    const queryString = params.toString()
+    return apiCall<MarketDataset[]>(
+      `/api/market-data/datasets${queryString ? `?${queryString}` : ''}`
+    )
+  },
+
+  getStats: () =>
+    apiCall<MarketDataStats[]>('/api/market-data/stats'),
+
+  checkApi: () =>
+    apiCall<MarketApiStatus>('/api/market-data/check-api'),
+
+  delete: (symbol: string) =>
+    apiCall<MarketDataDeleteResponse>(`/api/market-data/${symbol}`, {
+      method: 'DELETE',
+    }),
+}
+
 // Polling helper for round status
 export async function pollRoundStatus(
   roundId: string,
@@ -212,6 +251,7 @@ const api = {
   rounds,
   agents,
   leaderboard,
+  marketData,
   pollRoundStatus,
 }
 

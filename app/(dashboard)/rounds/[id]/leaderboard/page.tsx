@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LeaderboardTable } from "@/components/leaderboard/leaderboard-table"
-import { ArrowLeft, Trophy, Loader2, TrendingUp, TrendingDown, Clock, Target } from "lucide-react"
+import { ArrowLeft, Trophy, Loader2, TrendingUp, TrendingDown, Clock, Target, Sparkles, Activity } from "lucide-react"
 import { formatPercent } from "@/lib/utils"
 
 const SORT_OPTIONS: { value: LeaderboardSortBy; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "sharpe_ratio", label: "Sharpe", icon: Target },
   { value: "total_return", label: "Return", icon: TrendingUp },
+  { value: "alpha", label: "Alpha", icon: Sparkles },
+  { value: "beta", label: "Beta", icon: Activity },
   { value: "max_drawdown", label: "Min DD", icon: TrendingDown },
   { value: "calmar_ratio", label: "Calmar", icon: Target },
   { value: "win_rate", label: "Win Rate", icon: Trophy },
@@ -90,7 +92,7 @@ export default function LeaderboardPage() {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
@@ -112,6 +114,19 @@ export default function LeaderboardPage() {
           <CardContent>
             <div className="text-2xl font-bold text-green-500">
               {formatPercent(leaderboard.best_return)}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-1">
+              <Sparkles className="h-4 w-4" />
+              Best Alpha
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${leaderboard.best_alpha !== null && leaderboard.best_alpha > 0 ? 'text-green-500' : ''}`}>
+              {leaderboard.best_alpha !== null ? `${(leaderboard.best_alpha * 100).toFixed(2)}%` : "N/A"}
             </div>
           </CardContent>
         </Card>
@@ -147,12 +162,12 @@ export default function LeaderboardPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <CardTitle>Rankings</CardTitle>
             <Tabs value={sortBy} onValueChange={(v) => setSortBy(v as LeaderboardSortBy)}>
-              <TabsList className="grid grid-cols-3 sm:grid-cols-6 h-auto">
+              <TabsList className="grid grid-cols-4 sm:grid-cols-8 h-auto">
                 {SORT_OPTIONS.map(({ value, label, icon: Icon }) => (
                   <TabsTrigger
                     key={value}
                     value={value}
-                    className="text-xs sm:text-sm"
+                    className="text-xs sm:text-sm px-2"
                   >
                     <Icon className="h-3 w-3 mr-1 hidden sm:inline" />
                     {label}

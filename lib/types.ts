@@ -10,6 +10,66 @@ export interface User {
   created_at: string
 }
 
+// Market Data types
+export interface MarketDataStatus {
+  is_ready: boolean
+  has_aapl: boolean
+  has_spy: boolean
+  aapl_bars: number
+  spy_bars: number
+  aapl_date_range: {
+    start: string
+    end: string
+  } | null
+  spy_date_range: {
+    start: string
+    end: string
+  } | null
+  message: string
+  api_configured: boolean
+}
+
+export interface MarketDataset {
+  id: string
+  symbol: string
+  interval: string
+  start_date: string
+  end_date: string
+  total_bars: number
+  fetched_at: string
+}
+
+export interface MarketDataFetchRequest {
+  symbols: string[]
+  months?: number
+}
+
+export interface MarketDataFetchResponse {
+  status: string
+  message: string
+  datasets: MarketDataset[]
+}
+
+export interface MarketDataStats {
+  symbol: string
+  total_bars: number
+  earliest_date: string
+  latest_date: string
+  datasets_count: number
+}
+
+export interface MarketApiStatus {
+  status: string
+  daily_usage: number
+  daily_limit: number
+  credits_remaining: number
+}
+
+export interface MarketDataDeleteResponse {
+  message: string
+  datasets_deleted: number
+}
+
 export interface UserPublic {
   id: string
   nickname: string
@@ -27,16 +87,20 @@ export interface UserUpdate {
 export type RoundStatus = 'PENDING' | 'RUNNING' | 'COMPLETED'
 
 export interface MarketConfig {
-  initial_price: number
-  num_ticks: number
+  // Real data configuration
+  trading_interval?: string // "1min", "5min", "15min", "30min", "1h"
+  // Core settings
+  num_ticks: number | null // null = use all available data
   initial_equity: number
-  base_volatility: number
-  base_drift: number
-  trend_probability: number
-  volatile_probability: number
-  regime_persistence: number
   base_slippage: number
   fee_rate: number
+  // Synthetic data fallback settings
+  initial_price?: number
+  base_volatility?: number
+  base_drift?: number
+  trend_probability?: number
+  volatile_probability?: number
+  regime_persistence?: number
 }
 
 export interface RoundConfig {
@@ -50,6 +114,7 @@ export interface Round {
   market_seed: number
   config: RoundConfig
   price_data: number[] | null
+  spy_returns: number[] | null // SPY log returns for alpha/beta calculations
   started_at: string | null
   completed_at: string | null
   created_at: string
@@ -150,6 +215,10 @@ export interface AgentResult {
   survival_time: number
   equity_curve: number[]
   trades: Trade[]
+  // CAPM metrics
+  alpha: number | null
+  beta: number | null
+  cumulative_alpha: number[] | null
   created_at: string
 }
 
@@ -179,6 +248,8 @@ export type LeaderboardSortBy =
   | 'calmar_ratio' 
   | 'win_rate' 
   | 'survival_time'
+  | 'alpha'
+  | 'beta'
 
 export interface LeaderboardEntry {
   rank: number
@@ -197,6 +268,9 @@ export interface LeaderboardEntry {
   total_trades: number
   survival_time: number
   is_ghost: boolean
+  // CAPM metrics
+  alpha: number | null
+  beta: number | null
 }
 
 export interface Leaderboard {
@@ -208,6 +282,7 @@ export interface Leaderboard {
   best_return: number
   lowest_drawdown: number
   average_survival: number
+  best_alpha: number | null
 }
 
 export interface UserRanking {
@@ -218,6 +293,8 @@ export interface UserRanking {
   sharpe_ratio: number | null
   max_drawdown: number
   percentile: number
+  alpha: number | null
+  beta: number | null
 }
 
 // Auth verification

@@ -26,6 +26,17 @@ import { StrategySelector } from "@/components/agent/strategy-selector"
 import { StrategyParamsConfig } from "@/components/agent/strategy-params-config"
 import { SignalStackConfig } from "@/components/agent/signal-stack-config"
 import { RiskParamsConfig } from "@/components/agent/risk-params-config"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
 import {
   Loader2,
@@ -36,10 +47,13 @@ import {
   Trash2,
   Clock,
   CheckCircle,
+  Sparkles,
+  Activity,
 } from "lucide-react"
 import { formatDate, formatCurrency, formatPercent } from "@/lib/utils"
 import { TradingChart } from "@/components/charts/trading-chart"
 import { EquityCurve } from "@/components/charts/equity-curve"
+import { AlphaChart } from "@/components/charts/alpha-chart"
 
 export default function RoundDetailPage() {
   const params = useParams()
@@ -137,8 +151,6 @@ export default function RoundDetailPage() {
   }
 
   const handleDeleteAgent = async () => {
-    if (!confirm("Are you sure you want to delete your agent?")) return
-
     try {
       await api.agents.deleteMyAgent(roundId)
       setAgent(null)
@@ -244,14 +256,31 @@ export default function RoundDetailPage() {
                   {agent ? "Update Agent" : "Create Agent"}
                 </Button>
                 {agent && (
-                  <Button
-                    variant="destructive"
-                    onClick={handleDeleteAgent}
-                    className="w-full sm:w-auto"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete Agent
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        className="w-full sm:w-auto"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Agent
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This action cannot be undone. This will permanently delete your agent configuration for this round.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteAgent} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 )}
               </div>
             </CardContent>
@@ -336,6 +365,58 @@ export default function RoundDetailPage() {
             </Card>
           </div>
 
+          {/* CAPM Metrics (Alpha/Beta) */}
+          {(agent.result.alpha !== null || agent.result.beta !== null) && (
+            <div className="grid gap-3 sm:gap-4 grid-cols-2">
+              <Card className="border-green-500/20 bg-green-500/5">
+                <CardContent className="p-3 sm:p-6">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-green-500 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm text-muted-foreground truncate">Alpha (Annual)</span>
+                  </div>
+                  <div className={`text-xl sm:text-3xl font-bold mt-1 ${
+                    agent.result.alpha !== null && agent.result.alpha > 0 
+                      ? "text-green-500" 
+                      : agent.result.alpha !== null && agent.result.alpha < 0 
+                        ? "text-red-500" 
+                        : ""
+                  }`}>
+                    {agent.result.alpha !== null 
+                      ? `${agent.result.alpha > 0 ? '+' : ''}${(agent.result.alpha * 100).toFixed(2)}%` 
+                      : "N/A"}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {agent.result.alpha !== null && agent.result.alpha > 0 
+                      ? "Outperforming market on risk-adjusted basis" 
+                      : agent.result.alpha !== null && agent.result.alpha < 0 
+                        ? "Underperforming market on risk-adjusted basis"
+                        : "Excess return vs SPY benchmark"}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border-blue-500/20 bg-blue-500/5">
+                <CardContent className="p-3 sm:p-6">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <Activity className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm text-muted-foreground truncate">Beta</span>
+                  </div>
+                  <div className="text-xl sm:text-3xl font-bold mt-1 text-blue-500">
+                    {agent.result.beta?.toFixed(2) || "N/A"}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {agent.result.beta !== null && agent.result.beta > 1.2 
+                      ? "Aggressive - amplifies market moves" 
+                      : agent.result.beta !== null && agent.result.beta < 0.8 
+                        ? "Defensive - fades market moves"
+                        : agent.result.beta !== null && Math.abs(agent.result.beta) < 0.2
+                          ? "Market neutral strategy"
+                          : "Market exposure relative to SPY"}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           {/* More Stats */}
           <div className="grid gap-3 sm:gap-4 grid-cols-3">
             <Card>
@@ -378,7 +459,9 @@ export default function RoundDetailPage() {
             {round.price_data && round.price_data.length > 0 && (
               <Card>
                 <CardHeader className="p-3 sm:p-6 pb-2">
-                  <CardTitle className="text-sm sm:text-base">Market Price</CardTitle>
+                  <CardTitle className="text-sm sm:text-base">
+                    Market Price {round.spy_returns ? "(AAPL)" : ""}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="p-3 sm:p-6 pt-0">
                   <TradingChart priceData={round.price_data} height={200} />
@@ -400,6 +483,27 @@ export default function RoundDetailPage() {
               </Card>
             )}
           </div>
+
+          {/* Cumulative Alpha Chart */}
+          {agent.result.cumulative_alpha && agent.result.cumulative_alpha.length > 0 && (
+            <Card>
+              <CardHeader className="p-3 sm:p-6 pb-2">
+                <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-green-500" />
+                  Cumulative Alpha Over Time
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Running sum of excess returns vs SPY benchmark. Above zero = outperforming market.
+                </p>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-6 pt-0">
+                <AlphaChart
+                  cumulativeAlpha={agent.result.cumulative_alpha}
+                  height={250}
+                />
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 

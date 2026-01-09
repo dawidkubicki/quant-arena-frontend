@@ -114,11 +114,26 @@ export function LeaderboardTable({ entries, currentUserId }: LeaderboardTablePro
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
                 <div>
                   <div className="text-muted-foreground">Sharpe</div>
                   <div className="font-mono font-medium">{entry.sharpe_ratio?.toFixed(2) || "N/A"}</div>
                 </div>
+                <div>
+                  <div className="text-muted-foreground">Alpha</div>
+                  <div className={cn(
+                    "font-mono font-medium",
+                    entry.alpha !== null && entry.alpha > 0 ? "text-green-500" : entry.alpha !== null && entry.alpha < 0 ? "text-red-500" : ""
+                  )}>
+                    {entry.alpha !== null ? `${(entry.alpha * 100).toFixed(2)}%` : "N/A"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Beta</div>
+                  <div className="font-mono font-medium">{entry.beta?.toFixed(2) || "N/A"}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs mt-2">
                 <div>
                   <div className="text-muted-foreground">Max DD</div>
                   <div className="font-mono font-medium text-red-500">-{entry.max_drawdown.toFixed(1)}%</div>
@@ -148,6 +163,8 @@ export function LeaderboardTable({ entries, currentUserId }: LeaderboardTablePro
               <TableHead className="text-right">Final Equity</TableHead>
               <TableHead className="text-right">Return</TableHead>
               <TableHead className="text-right">Sharpe</TableHead>
+              <TableHead className="text-right">Alpha</TableHead>
+              <TableHead className="text-right">Beta</TableHead>
               <TableHead className="text-right">Max DD</TableHead>
               <TableHead className="text-right">Win Rate</TableHead>
               <TableHead className="text-right">Trades</TableHead>
@@ -215,6 +232,17 @@ export function LeaderboardTable({ entries, currentUserId }: LeaderboardTablePro
                   </TableCell>
                   <TableCell className="text-right font-mono">
                     {entry.sharpe_ratio?.toFixed(2) || "N/A"}
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      "text-right font-mono",
+                      entry.alpha !== null && entry.alpha > 0 ? "text-green-500" : entry.alpha !== null && entry.alpha < 0 ? "text-red-500" : ""
+                    )}
+                  >
+                    {entry.alpha !== null ? `${(entry.alpha * 100).toFixed(2)}%` : "N/A"}
+                  </TableCell>
+                  <TableCell className="text-right font-mono">
+                    {entry.beta?.toFixed(2) || "N/A"}
                   </TableCell>
                   <TableCell className="text-right font-mono text-red-500">
                     -{entry.max_drawdown.toFixed(2)}%
