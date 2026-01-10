@@ -1,3 +1,10 @@
+// Chart data point with x and y axes
+export interface ChartDataPoint {
+  tick: number              // Sequential tick number (0-indexed)
+  timestamp: string | null  // ISO 8601 timestamp (null for synthetic data)
+  value: number             // The actual data value
+}
+
 // User types
 export interface User {
   id: string
@@ -84,7 +91,7 @@ export interface UserUpdate {
 }
 
 // Round types
-export type RoundStatus = 'PENDING' | 'RUNNING' | 'COMPLETED'
+export type RoundStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
 
 export interface MarketConfig {
   // Real data configuration
@@ -113,8 +120,12 @@ export interface Round {
   status: RoundStatus
   market_seed: number
   config: RoundConfig
-  price_data: number[] | null
-  spy_returns: number[] | null // SPY log returns for alpha/beta calculations
+  // Chart data with x-axis and y-axis
+  price_data: ChartDataPoint[] | null
+  spy_returns: ChartDataPoint[] | null // SPY log returns for alpha/beta calculations
+  // Legacy (deprecated) - for backward compatibility
+  price_data_values?: number[]
+  spy_returns_values?: number[]
   started_at: string | null
   completed_at: string | null
   created_at: string
@@ -133,6 +144,10 @@ export interface RoundList {
 export interface RoundStatusResponse {
   id: string
   status: RoundStatus
+  progress: number           // 0-100 percentage of simulation ticks completed
+  agents_processed: number   // Number of agents with saved results
+  total_agents: number       // Total agents in the round
+  error_message: string | null // Error details if status is FAILED
   started_at: string | null
   completed_at: string | null
 }
@@ -163,12 +178,10 @@ export interface StrategyParams {
 }
 
 export interface SignalStack {
-  use_sma: boolean
-  sma_window: number
-  use_rsi: boolean
-  rsi_window: number
-  rsi_overbought: number
-  rsi_oversold: number
+  // SMA Trend Filter - only allows trades in direction of trend
+  use_sma_trend_filter: boolean
+  sma_filter_window: number
+  // Volatility Filter - reduces signal confidence during high volatility
   use_volatility_filter: boolean
   volatility_window: number
   volatility_threshold: number
@@ -188,17 +201,72 @@ export interface AgentConfig {
   risk_params: RiskParams
 }
 
-// Trade types
+// Trade types - Long-only (no short selling)
+export type TradeAction = 'OPEN_LONG' | 'CLOSE_LONG'
+
 export interface Trade {
-  tick: number
-  action: string
-  price: number
-  executed_price: number
+  tick: number              // X-axis: tick number
+  timestamp?: string | null // X-axis: market timestamp
+  action: TradeAction
+  price: number             // Y-axis: market price
+  executed_price: number    // Y-axis: execution price
   size: number
   cost: number
   pnl: number
   equity_after: number
   reason: string
+}
+
+// Completed trade with paired entry/exit (from /trades/agent/{agent_id}/completed)
+export interface CompletedTrade {
+  trade_number: number
+  // Entry details
+  entry_tick: number
+  entry_timestamp: string | null
+  entry_price: number
+  entry_executed_price: number
+  entry_reason: string
+  // Exit details
+  exit_tick: number
+  exit_timestamp: string | null
+  exit_price: number
+  exit_executed_price: number
+  exit_reason: string
+  // Trade metrics
+  size: number
+  total_cost: number
+  pnl: number
+  return_pct: number
+  duration_ticks: number
+  is_winner: boolean
+}
+
+// Open position (if any)
+export interface OpenPosition {
+  entry_tick: number
+  entry_timestamp: string | null
+  entry_price: number
+  entry_executed_price: number
+  entry_reason: string
+  size: number
+  current_pnl: number | null
+}
+
+// Response from GET /trades/agent/{agent_id}/completed
+export interface CompletedTradesResponse {
+  completed_trades: CompletedTrade[]
+  has_open_position: boolean
+  open_position: OpenPosition | null
+  // Summary statistics
+  total_completed_trades: number
+  total_pnl: number
+  winning_trades: number
+  losing_trades: number
+  win_rate: number
+  avg_return_pct: number
+  avg_duration_ticks: number
+  best_trade_pnl: number
+  worst_trade_pnl: number
 }
 
 // Agent result types
@@ -213,12 +281,16 @@ export interface AgentResult {
   total_trades: number
   win_rate: number | null
   survival_time: number
-  equity_curve: number[]
+  // Chart data with x-axis and y-axis
+  equity_curve: ChartDataPoint[]
+  cumulative_alpha: ChartDataPoint[] | null
+  // Legacy (deprecated) - for backward compatibility
+  equity_curve_values?: number[]
+  cumulative_alpha_values?: number[]
   trades: Trade[]
   // CAPM metrics
   alpha: number | null
   beta: number | null
-  cumulative_alpha: number[] | null
   created_at: string
 }
 
@@ -297,6 +369,59 @@ export interface UserRanking {
   beta: number | null
 }
 
+// Global Leaderboard types
+export type GlobalLeaderboardSortBy =
+  | 'performance_score'
+  | 'avg_sharpe_ratio'
+  | 'avg_total_return'
+  | 'total_rounds'
+  | 'win_rate'
+  | 'avg_alpha'
+
+export interface GlobalLeaderboardEntry {
+  rank: number
+  user_id: string
+  nickname: string
+  color: string
+  icon: string
+  total_rounds: number
+  avg_sharpe_ratio: number | null
+  best_sharpe_ratio: number | null
+  avg_total_return: number
+  best_total_return: number
+  avg_alpha: number | null
+  best_alpha: number | null
+  first_place_count: number
+  top_3_count: number
+  top_10_count: number
+  win_rate: number
+  performance_score: number
+}
+
+export interface GlobalLeaderboard {
+  entries: GlobalLeaderboardEntry[]
+  total_users: number
+  total_rounds_analyzed: number
+  highest_avg_sharpe: number
+  highest_avg_return: number
+  most_rounds_participated: number
+}
+
+export interface GlobalUserRanking {
+  rank: number
+  total_users: number
+  total_rounds: number
+  avg_sharpe_ratio: number | null
+  avg_total_return: number
+  avg_alpha: number | null
+  win_rate: number
+  first_place_count: number
+  top_3_count: number
+  top_10_count: number
+  performance_score: number
+  percentile: number
+}
+
 // Auth verification
 export interface AuthVerify {
   valid: boolean
@@ -307,15 +432,11 @@ export interface AuthVerify {
 
 // Default configs
 export const DEFAULT_SIGNAL_STACK: SignalStack = {
-  use_sma: true,
-  sma_window: 20,
-  use_rsi: true,
-  rsi_window: 14,
-  rsi_overbought: 70,
-  rsi_oversold: 30,
+  use_sma_trend_filter: false,
+  sma_filter_window: 50,
   use_volatility_filter: false,
   volatility_window: 20,
-  volatility_threshold: 0.03,
+  volatility_threshold: 1.5,
 }
 
 export const DEFAULT_RISK_PARAMS: RiskParams = {

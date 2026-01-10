@@ -12,6 +12,7 @@ import type {
   StrategyParams,
   SignalStack,
   RiskParams,
+  RoundStatusResponse,
 } from "@/lib/types"
 import {
   DEFAULT_SIGNAL_STACK,
@@ -49,11 +50,14 @@ import {
   CheckCircle,
   Sparkles,
   Activity,
+  AlertCircle,
 } from "lucide-react"
 import { formatDate, formatCurrency, formatPercent } from "@/lib/utils"
 import { TradingChart } from "@/components/charts/trading-chart"
 import { EquityCurve } from "@/components/charts/equity-curve"
 import { AlphaChart } from "@/components/charts/alpha-chart"
+import { TradeHistoryTable } from "@/components/charts/trade-history-table"
+import { FullscreenChart } from "@/components/charts/fullscreen-chart"
 
 export default function RoundDetailPage() {
   const params = useParams()
@@ -65,6 +69,7 @@ export default function RoundDetailPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [polling, setPolling] = useState(false)
+  const [simulationProgress, setSimulationProgress] = useState<RoundStatusResponse | null>(null)
 
   // Agent config state
   const [strategyType, setStrategyType] = useState<StrategyType>("MEAN_REVERSION")
@@ -78,7 +83,7 @@ export default function RoundDetailPage() {
     try {
       const [roundData, agentData] = await Promise.all([
         api.rounds.get(roundId),
-        api.agents.getMyAgent(roundId).catch(() => null),
+        api.agents.getMyAgent(roundId), // 404 is gracefully handled, returns null
       ])
       setRound(roundData)
       setAgent(agentData)
@@ -109,12 +114,22 @@ export default function RoundDetailPage() {
     const poll = async () => {
       try {
         const status = await api.rounds.getStatus(roundId)
+        
+        // Update progress state
+        setSimulationProgress(status)
+        
         if (status.status === "COMPLETED") {
           setPolling(false)
+          setSimulationProgress(null)
           fetchData()
           toast.success("Round completed!")
+        } else if (status.status === "FAILED") {
+          setPolling(false)
+          setSimulationProgress(null)
+          fetchData()
+          toast.error(status.error_message || "Simulation failed")
         } else {
-          setTimeout(poll, 1000)
+          setTimeout(poll, 1500)
         }
       } catch {
         setPolling(false)
@@ -293,14 +308,55 @@ export default function RoundDetailPage() {
           <CardContent className="flex flex-col items-center justify-center py-12 sm:py-16 px-4">
             <Loader2 className="h-10 w-10 sm:h-12 sm:w-12 animate-spin text-primary mb-4" />
             <h2 className="text-lg sm:text-xl font-semibold text-center">Simulation Running</h2>
-            <p className="text-sm text-muted-foreground mt-2 text-center">
-              Please wait while the market simulation runs...
-            </p>
+            
+            {/* Progress Bar */}
+            {simulationProgress && (
+              <div className="w-full max-w-md mt-4 space-y-2">
+                <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                  <div 
+                    className="bg-primary h-full transition-all duration-300 ease-out"
+                    style={{ width: `${simulationProgress.progress}%` }}
+                  />
+                </div>
+                <p className="text-sm text-center font-medium">
+                  {simulationProgress.progress}% complete
+                </p>
+                {simulationProgress.total_agents > 0 && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    Processing {simulationProgress.total_agents} agents
+                  </p>
+                )}
+                {simulationProgress.agents_processed > 0 && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    Saved results: {simulationProgress.agents_processed} / {simulationProgress.total_agents}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!simulationProgress && (
+              <p className="text-sm text-muted-foreground mt-2 text-center">
+                Please wait while the market simulation runs...
+              </p>
+            )}
+            
             {agent && (
               <p className="text-xs sm:text-sm text-muted-foreground mt-4 text-center">
                 Your agent ({agent.strategy_type}) is competing!
               </p>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {round.status === "FAILED" && (
+        <Card className="border-red-500/20">
+          <CardContent className="flex flex-col items-center justify-center py-12 sm:py-16 px-4">
+            <AlertCircle className="h-10 w-10 sm:h-12 sm:w-12 text-red-500 mb-4" />
+            <h2 className="text-lg sm:text-xl font-semibold text-center text-red-500">Simulation Failed</h2>
+            <p className="text-sm text-muted-foreground mt-2 text-center max-w-md">
+              The simulation encountered an error and could not complete.
+            </p>
           </CardContent>
         </Card>
       )}
@@ -460,11 +516,33 @@ export default function RoundDetailPage() {
               <Card>
                 <CardHeader className="p-3 sm:p-6 pb-2">
                   <CardTitle className="text-sm sm:text-base">
-                    Market Price {round.spy_returns ? "(AAPL)" : ""}
+                    Market Price {round.spy_returns ? "(AAPL)" : ""} with Trade Signals
                   </CardTitle>
+                  {agent.result.trades && agent.result.trades.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="text-green-500">▲</span> Buy signals{" "}
+                      <span className="text-red-500">▼</span> Sell signals
+                    </p>
+                  )}
                 </CardHeader>
                 <CardContent className="p-3 sm:p-6 pt-0">
-                  <TradingChart priceData={round.price_data} height={200} />
+                  <FullscreenChart
+                    title={`Market Price ${round.spy_returns ? "(AAPL)" : ""} with Trade Signals`}
+                    description="Price chart with buy/sell markers showing when trades were executed"
+                    fullscreenContent={(height) => (
+                      <TradingChart
+                        priceData={round.price_data!}
+                        trades={agent.result!.trades}
+                        height={height}
+                      />
+                    )}
+                  >
+                    <TradingChart
+                      priceData={round.price_data}
+                      trades={agent.result.trades}
+                      height={250}
+                    />
+                  </FullscreenChart>
                 </CardContent>
               </Card>
             )}
@@ -474,11 +552,23 @@ export default function RoundDetailPage() {
                   <CardTitle className="text-sm sm:text-base">Your Equity Curve</CardTitle>
                 </CardHeader>
                 <CardContent className="p-3 sm:p-6 pt-0">
-                  <EquityCurve
-                    equityData={agent.result.equity_curve}
-                    initialEquity={round.config.market.initial_equity}
-                    height={200}
-                  />
+                  <FullscreenChart
+                    title="Your Equity Curve"
+                    description="Portfolio value over time during the simulation"
+                    fullscreenContent={(height) => (
+                      <EquityCurve
+                        equityData={agent.result!.equity_curve}
+                        initialEquity={round.config.market.initial_equity}
+                        height={height}
+                      />
+                    )}
+                  >
+                    <EquityCurve
+                      equityData={agent.result.equity_curve}
+                      initialEquity={round.config.market.initial_equity}
+                      height={200}
+                    />
+                  </FullscreenChart>
                 </CardContent>
               </Card>
             )}
@@ -497,10 +587,44 @@ export default function RoundDetailPage() {
                 </p>
               </CardHeader>
               <CardContent className="p-3 sm:p-6 pt-0">
-                <AlphaChart
-                  cumulativeAlpha={agent.result.cumulative_alpha}
-                  height={250}
-                />
+                <FullscreenChart
+                  title="Cumulative Alpha Over Time"
+                  description="Running sum of excess returns vs SPY benchmark. Above zero = outperforming market."
+                  fullscreenContent={(height) => (
+                    <AlphaChart
+                      cumulativeAlpha={agent.result!.cumulative_alpha!}
+                      height={height}
+                    />
+                  )}
+                >
+                  <AlphaChart
+                    cumulativeAlpha={agent.result.cumulative_alpha}
+                    height={250}
+                  />
+                </FullscreenChart>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Trade History Table */}
+          {agent.result.trades && agent.result.trades.length > 0 && (
+            <Card>
+              <CardHeader className="p-3 sm:p-6 pb-2">
+                <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                  <Activity className="h-4 w-4" />
+                  Trade History
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Complete list of all trades executed during the simulation.
+                </p>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-6 pt-0">
+                <FullscreenChart
+                  title="Trade History"
+                  description="Complete list of all trades executed during the simulation"
+                >
+                  <TradeHistoryTable trades={agent.result.trades} />
+                </FullscreenChart>
               </CardContent>
             </Card>
           )}

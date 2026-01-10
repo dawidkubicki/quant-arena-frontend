@@ -14,24 +14,28 @@ const strategies: {
   type: StrategyType
   name: string
   description: string
+  beta: string
   icon: React.ComponentType<{ className?: string }>
 }[] = [
   {
     type: "MEAN_REVERSION",
     name: "Mean Reversion",
-    description: "Bet on prices returning to their average. Best in range-bound markets.",
+    description: "Bets on price returning to average - buys dips, sells rallies. Best in range-bound, choppy markets.",
+    beta: "Low (<1.0)",
     icon: TrendingDown,
   },
   {
     type: "TREND_FOLLOWING",
     name: "Trend Following",
-    description: "Follow market trends using moving average crossovers. Best in trending markets.",
+    description: "Follows the trend using moving average crossovers. Best in markets with clear directional moves.",
+    beta: "Medium (~1.0)",
     icon: TrendingUp,
   },
   {
     type: "MOMENTUM",
     name: "Momentum",
-    description: "Buy strength, sell weakness based on price momentum and RSI.",
+    description: "Buys strength, sells weakness based on price momentum and RSI. Best for overbought/oversold conditions.",
+    beta: "High (>1.0)",
     icon: Zap,
   },
 ]
@@ -44,7 +48,7 @@ export function StrategySelector({ value, onChange }: StrategySelectorProps) {
         Select your trading strategy. Each has different strengths in different market conditions.
       </p>
       <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-3">
-        {strategies.map(({ type, name, description, icon: Icon }) => (
+        {strategies.map(({ type, name, description, beta, icon: Icon }) => (
           <Card
             key={type}
             className={cn(
@@ -62,10 +66,13 @@ export function StrategySelector({ value, onChange }: StrategySelectorProps) {
                 <CardTitle className="text-sm sm:text-base">{name}</CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="p-3 sm:p-4 pt-0">
+            <CardContent className="p-3 sm:p-4 pt-0 space-y-1">
               <CardDescription className="text-xs line-clamp-2">
                 {description}
               </CardDescription>
+              <div className="text-xs text-muted-foreground">
+                <span className="font-medium">Beta:</span> {beta}
+              </div>
             </CardContent>
           </Card>
         ))}

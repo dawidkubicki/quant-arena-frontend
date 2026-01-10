@@ -39,10 +39,10 @@ export function StrategyParamsConfig({
               value={[value.lookback_window || 20]}
               onValueChange={([v]) => update({ lookback_window: v })}
               min={5}
-              max={100}
+              max={200}
               step={1}
             />
-            <p className="text-xs text-muted-foreground">Periods to calculate mean</p>
+            <p className="text-xs text-muted-foreground">Window for calculating mean price (z-score baseline)</p>
           </div>
           <div className="space-y-2 sm:space-y-3 p-3 sm:p-4 border rounded-lg">
             <div className="flex justify-between items-center">
@@ -53,10 +53,10 @@ export function StrategyParamsConfig({
               value={[value.entry_threshold || 2]}
               onValueChange={([v]) => update({ entry_threshold: v })}
               min={0.5}
-              max={4}
+              max={5}
               step={0.1}
             />
-            <p className="text-xs text-muted-foreground">Z-score to enter</p>
+            <p className="text-xs text-muted-foreground">Z-score threshold to enter position</p>
           </div>
           <div className="space-y-2 sm:space-y-3 p-3 sm:p-4 border rounded-lg">
             <div className="flex justify-between items-center">
@@ -70,7 +70,7 @@ export function StrategyParamsConfig({
               max={2}
               step={0.1}
             />
-            <p className="text-xs text-muted-foreground">Z-score to exit</p>
+            <p className="text-xs text-muted-foreground">Z-score threshold to exit position</p>
           </div>
         </div>
       )}
@@ -89,7 +89,7 @@ export function StrategyParamsConfig({
               max={50}
               step={1}
             />
-            <p className="text-xs text-muted-foreground">Short-term MA window</p>
+            <p className="text-xs text-muted-foreground">Fast EMA period - more responsive to recent prices</p>
           </div>
           <div className="space-y-2 sm:space-y-3 p-3 sm:p-4 border rounded-lg">
             <div className="flex justify-between items-center">
@@ -103,7 +103,7 @@ export function StrategyParamsConfig({
               max={200}
               step={1}
             />
-            <p className="text-xs text-muted-foreground">Long-term MA window</p>
+            <p className="text-xs text-muted-foreground">Slow EMA period - smoother trend identification</p>
           </div>
           <div className="space-y-2 sm:space-y-3 p-3 sm:p-4 border rounded-lg">
             <div className="flex justify-between items-center">
@@ -117,7 +117,7 @@ export function StrategyParamsConfig({
               max={5}
               step={0.1}
             />
-            <p className="text-xs text-muted-foreground">Stop distance</p>
+            <p className="text-xs text-muted-foreground">ATR multiplier for volatility-adjusted signals</p>
           </div>
         </div>
       )}
@@ -133,10 +133,10 @@ export function StrategyParamsConfig({
               value={[value.momentum_window || 14]}
               onValueChange={([v]) => update({ momentum_window: v })}
               min={5}
-              max={50}
+              max={100}
               step={1}
             />
-            <p className="text-xs text-muted-foreground">Periods for momentum</p>
+            <p className="text-xs text-muted-foreground">Lookback period for momentum calculation</p>
           </div>
           <div className="space-y-2 sm:space-y-3 p-3 sm:p-4 border rounded-lg">
             <div className="flex justify-between items-center">
@@ -147,10 +147,10 @@ export function StrategyParamsConfig({
               value={[value.rsi_window || 14]}
               onValueChange={([v]) => update({ rsi_window: v })}
               min={5}
-              max={30}
+              max={50}
               step={1}
             />
-            <p className="text-xs text-muted-foreground">Periods for RSI</p>
+            <p className="text-xs text-muted-foreground">RSI calculation period</p>
           </div>
           <div className="space-y-2 sm:space-y-3 p-3 sm:p-4 border rounded-lg">
             <div className="flex justify-between items-center">
@@ -161,10 +161,10 @@ export function StrategyParamsConfig({
               value={[value.rsi_overbought || 70]}
               onValueChange={([v]) => update({ rsi_overbought: v })}
               min={50}
-              max={90}
+              max={95}
               step={1}
             />
-            <p className="text-xs text-muted-foreground">Overbought level</p>
+            <p className="text-xs text-muted-foreground">RSI level indicating overbought (avoid new longs)</p>
           </div>
           <div className="space-y-2 sm:space-y-3 p-3 sm:p-4 border rounded-lg">
             <div className="flex justify-between items-center">
@@ -174,11 +174,11 @@ export function StrategyParamsConfig({
             <Slider
               value={[value.rsi_oversold || 30]}
               onValueChange={([v]) => update({ rsi_oversold: v })}
-              min={10}
+              min={5}
               max={50}
               step={1}
             />
-            <p className="text-xs text-muted-foreground">Oversold level</p>
+            <p className="text-xs text-muted-foreground">RSI level indicating oversold (avoid new shorts)</p>
           </div>
         </div>
       )}

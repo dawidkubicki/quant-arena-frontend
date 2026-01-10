@@ -2,11 +2,56 @@
 
 import { useEffect, useRef } from "react"
 import { createChart, ColorType, LineStyle, LineSeries } from "lightweight-charts"
+import type { ChartDataPoint } from "@/lib/types"
 
 interface AlphaChartProps {
-  cumulativeAlpha: number[]
+  cumulativeAlpha: ChartDataPoint[] | number[] // Support both new and legacy formats
   height?: number
   title?: string
+}
+
+// Helper to check if data is in ChartDataPoint format
+function isChartDataPointArray(data: unknown[]): data is ChartDataPoint[] {
+  if (data.length === 0) return false
+  const first = data[0]
+  return typeof first === 'object' && first !== null && 'value' in first
+}
+
+// Check if a timestamp is valid
+function isValidTimestamp(timestamp: string | null | undefined): boolean {
+  if (!timestamp) return false
+  const date = new Date(timestamp)
+  return !isNaN(date.getTime())
+}
+
+// Helper to normalize data to chart format (with percentage conversion for alpha)
+function normalizeAlphaData(data: ChartDataPoint[] | number[]): { time: number; value: number }[] {
+  if (data.length === 0) return []
+  
+  if (isChartDataPointArray(data)) {
+    // Check if ALL points have valid timestamps to ensure consistency
+    const hasAllTimestamps = data.every(point => isValidTimestamp(point.timestamp))
+    
+    if (hasAllTimestamps) {
+      // Use timestamps (converted to Unix seconds) for all points
+      return data.map((point) => ({
+        time: Math.floor(new Date(point.timestamp!).getTime() / 1000),
+        value: point.value * 100,
+      }))
+    } else {
+      // Fall back to tick-based time for ALL points (synthetic data or mixed)
+      return data.map((point, index) => ({
+        time: point.tick ?? index,
+        value: point.value * 100,
+      }))
+    }
+  } else {
+    // Legacy format: use index as time, number * 100 as percentage
+    return (data as number[]).map((value, index) => ({
+      time: index,
+      value: value * 100,
+    }))
+  }
 }
 
 export function AlphaChart({
@@ -18,6 +63,10 @@ export function AlphaChart({
 
   useEffect(() => {
     if (!chartContainerRef.current || cumulativeAlpha.length === 0) return
+
+    // Normalize data to chart format (with percentage conversion)
+    const chartData = normalizeAlphaData(cumulativeAlpha)
+    if (chartData.length === 0) return
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -35,7 +84,8 @@ export function AlphaChart({
       },
       timeScale: {
         borderColor: "#27272a",
-        timeVisible: false,
+        timeVisible: true,
+        secondsVisible: false,
       },
       crosshair: {
         vertLine: {
@@ -59,13 +109,7 @@ export function AlphaChart({
       lastValueVisible: true,
     })
 
-    // Convert to percentage
-    const alphaChartData = cumulativeAlpha.map((alpha, index) => ({
-      time: index as unknown as string,
-      value: alpha * 100, // Convert to percentage
-    }))
-
-    alphaSeries.setData(alphaChartData)
+    alphaSeries.setData(chartData)
 
     // Zero baseline
     const baselineSeries = chart.addSeries(LineSeries, {
@@ -76,8 +120,8 @@ export function AlphaChart({
       lastValueVisible: false,
     })
 
-    const baselineData = cumulativeAlpha.map((_, index) => ({
-      time: index as unknown as string,
+    const baselineData = chartData.map((point) => ({
+      time: point.time,
       value: 0,
     }))
 

@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import api from "@/lib/api/client"
-import type { RoundList, User, RoundCreate, MarketDataStatus, MarketDataStats } from "@/lib/types"
+import type { RoundList, User, RoundCreate, MarketDataStatus, MarketDataStats, RoundStatusResponse } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -52,6 +52,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
 import {
   Shield,
@@ -71,6 +72,15 @@ import {
 } from "lucide-react"
 import { formatDate } from "@/lib/utils"
 
+// Progress tracking for running simulations
+interface SimulationProgress {
+  roundId: string
+  progress: number
+  agentsProcessed: number
+  totalAgents: number
+  errorMessage: string | null
+}
+
 export default function AdminPage() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
@@ -81,6 +91,10 @@ export default function AdminPage() {
   const [stopping, setStopping] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+
+  // Simulation progress tracking
+  const [simulationProgress, setSimulationProgress] = useState<Map<string, SimulationProgress>>(new Map())
+  const pollingIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
 
   // Market data state
   const [marketDataStatus, setMarketDataStatus] = useState<MarketDataStatus | null>(null)
@@ -98,6 +112,86 @@ export default function AdminPage() {
   const [baseVolatility, setBaseVolatility] = useState(2)
   const [feeRate, setFeeRate] = useState(0.1)
   const [baseSlippage, setBaseSlippage] = useState(0.1)
+
+  // Cleanup polling intervals on unmount
+  useEffect(() => {
+    return () => {
+      pollingIntervalsRef.current.forEach((interval) => clearInterval(interval))
+    }
+  }, [])
+
+  // Start polling for a round's status
+  const startPolling = useCallback((roundId: string) => {
+    // Don't start if already polling
+    if (pollingIntervalsRef.current.has(roundId)) return
+
+    const pollStatus = async () => {
+      try {
+        const status: RoundStatusResponse = await api.rounds.getStatus(roundId)
+        
+        setSimulationProgress((prev) => {
+          const newMap = new Map(prev)
+          newMap.set(roundId, {
+            roundId,
+            progress: status.progress,
+            agentsProcessed: status.agents_processed,
+            totalAgents: status.total_agents,
+            errorMessage: status.error_message,
+          })
+          return newMap
+        })
+
+        if (status.status === 'COMPLETED') {
+          // Clear polling interval
+          const interval = pollingIntervalsRef.current.get(roundId)
+          if (interval) {
+            clearInterval(interval)
+            pollingIntervalsRef.current.delete(roundId)
+          }
+          
+          // Clear progress and refresh rounds
+          setSimulationProgress((prev) => {
+            const newMap = new Map(prev)
+            newMap.delete(roundId)
+            return newMap
+          })
+          setStarting(null)
+          
+          toast.success("Simulation completed!")
+          const updatedRounds = await api.rounds.list()
+          setRounds(updatedRounds)
+        } else if (status.status === 'FAILED') {
+          // Clear polling interval
+          const interval = pollingIntervalsRef.current.get(roundId)
+          if (interval) {
+            clearInterval(interval)
+            pollingIntervalsRef.current.delete(roundId)
+          }
+          
+          // Clear progress and refresh rounds
+          setSimulationProgress((prev) => {
+            const newMap = new Map(prev)
+            newMap.delete(roundId)
+            return newMap
+          })
+          setStarting(null)
+          
+          toast.error(status.error_message || "Simulation failed")
+          const updatedRounds = await api.rounds.list()
+          setRounds(updatedRounds)
+        }
+      } catch (error) {
+        console.error("Failed to poll round status:", error)
+      }
+    }
+
+    // Initial poll
+    pollStatus()
+
+    // Set up interval for subsequent polls (every 1.5 seconds)
+    const interval = setInterval(pollStatus, 1500)
+    pollingIntervalsRef.current.set(roundId, interval)
+  }, [])
 
   const fetchMarketDataInfo = async () => {
     try {
@@ -129,6 +223,11 @@ export default function AdminPage() {
         setUser(userData)
         setRounds(roundsData)
 
+        // Start polling for any rounds that are already running
+        roundsData
+          .filter((r) => r.status === 'RUNNING')
+          .forEach((r) => startPolling(r.id))
+
         // Fetch market data status
         await fetchMarketDataInfo()
       } catch (error) {
@@ -139,7 +238,7 @@ export default function AdminPage() {
       }
     }
     fetchData()
-  }, [router])
+  }, [router, startPolling])
 
   const handleCreateRound = async () => {
     if (!roundName.trim()) {
@@ -241,18 +340,36 @@ export default function AdminPage() {
   const handleStartRound = async (roundId: string) => {
     setStarting(roundId)
     try {
-      await api.rounds.start(roundId)
-      toast.success("Simulation started!")
+      // The backend now returns 202 Accepted immediately
+      const status = await api.rounds.start(roundId)
+      
+      // Initialize progress tracking
+      setSimulationProgress((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(roundId, {
+          roundId,
+          progress: status.progress || 0,
+          agentsProcessed: status.agents_processed || 0,
+          totalAgents: status.total_agents || 0,
+          errorMessage: null,
+        })
+        return newMap
+      })
 
-      // Refresh rounds
+      toast.info("Simulation started! Tracking progress...")
+
+      // Start polling for progress updates
+      startPolling(roundId)
+
+      // Refresh rounds to update status to RUNNING
       const updatedRounds = await api.rounds.list()
       setRounds(updatedRounds)
     } catch (error) {
       console.error("Failed to start round:", error)
       toast.error("Failed to start simulation")
-    } finally {
       setStarting(null)
     }
+    // Note: setStarting(null) is now handled in the polling callback when complete/failed
   }
 
   const handleStopRound = async (roundId: string) => {
@@ -309,6 +426,7 @@ export default function AdminPage() {
   const pendingRounds = rounds.filter((r) => r.status === "PENDING")
   const runningRounds = rounds.filter((r) => r.status === "RUNNING")
   const completedRounds = rounds.filter((r) => r.status === "COMPLETED")
+  const failedRounds = rounds.filter((r) => r.status === "FAILED")
 
   return (
     <div className="space-y-6">
@@ -319,16 +437,49 @@ export default function AdminPage() {
             Admin Panel
           </h1>
           <p className="text-muted-foreground mt-1">
-            Manage trading rounds and simulations
+            Manage trading rounds and market data
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Round
+      </div>
+
+      <Tabs defaultValue="rounds" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="rounds" className="gap-2">
+            <Users className="h-4 w-4" />
+            Rounds
+          </TabsTrigger>
+          <TabsTrigger value="data" className="gap-2">
+            <Database className="h-4 w-4" />
+            Market Data
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Rounds Tab */}
+        <TabsContent value="rounds" className="space-y-6 mt-0">
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  const updatedRounds = await api.rounds.list()
+                  setRounds(updatedRounds)
+                  toast.success("Rounds refreshed")
+                } catch (error) {
+                  console.error("Failed to refresh rounds:", error)
+                  toast.error("Failed to refresh rounds")
+                }
+              }}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Reload
             </Button>
-          </DialogTrigger>
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Round
+                </Button>
+              </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Create New Round</DialogTitle>
@@ -507,32 +658,239 @@ export default function AdminPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+          </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Pending Rounds</CardDescription>
-            <CardTitle className="text-3xl">{pendingRounds.length}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Running Rounds</CardDescription>
-            <CardTitle className="text-3xl">{runningRounds.length}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Completed Rounds</CardDescription>
-            <CardTitle className="text-3xl">{completedRounds.length}</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+          {/* Stats */}
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Pending Rounds</CardDescription>
+                <CardTitle className="text-3xl">{pendingRounds.length}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Running Rounds</CardDescription>
+                <CardTitle className="text-3xl text-blue-500">{runningRounds.length}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Completed Rounds</CardDescription>
+                <CardTitle className="text-3xl text-green-500">{completedRounds.length}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Failed Rounds</CardDescription>
+                <CardTitle className="text-3xl text-red-500">{failedRounds.length}</CardTitle>
+              </CardHeader>
+            </Card>
+          </div>
 
-      {/* Market Data Management */}
-      <Card>
+          {/* Rounds Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>All Rounds</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {rounds.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No rounds yet. Create one to get started!
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Agents</TableHead>
+                      <TableHead>Seed</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rounds.map((round) => {
+                      const progress = simulationProgress.get(round.id)
+                      
+                      return (
+                      <TableRow key={round.id}>
+                        <TableCell className="font-medium">{round.name}</TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <RoundStatusBadge 
+                              status={round.status} 
+                              progress={progress?.progress}
+                              errorMessage={progress?.errorMessage}
+                            />
+                            {round.status === 'RUNNING' && progress && (
+                              <div className="space-y-1">
+                                <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                                  <div 
+                                    className="bg-blue-500 h-full transition-all duration-300"
+                                    style={{ width: `${progress.progress}%` }}
+                                  />
+                                </div>
+                                {progress.agentsProcessed > 0 && (
+                                  <p className="text-xs text-muted-foreground">
+                                    Saved: {progress.agentsProcessed}/{progress.totalAgents}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Users className="h-4 w-4 text-muted-foreground" />
+                            {round.agent_count}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {round.market_seed}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatDate(round.created_at)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            {round.status === "PENDING" && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleStartRound(round.id)}
+                                  disabled={starting === round.id}
+                                >
+                                  {starting === round.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Play className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      disabled={deleting === round.id}
+                                    >
+                                      {deleting === round.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete Round?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to delete this round? This action cannot be undone and will permanently delete the round and all associated agent data.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDeleteRound(round.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                        Delete
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </>
+                            )}
+                            {round.status === "RUNNING" && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    disabled={stopping === round.id}
+                                  >
+                                    {stopping === round.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <>
+                                        <StopCircle className="h-4 w-4 mr-1" />
+                                        Force Stop
+                                      </>
+                                    )}
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Force Stop Simulation?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to force stop this simulation? This will immediately terminate the running simulation and mark the round as completed with current results.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleStopRound(round.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                      Force Stop
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                            {(round.status === "COMPLETED" || round.status === "FAILED") && (
+                              <>
+                                {round.status === "COMPLETED" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      router.push(`/rounds/${round.id}/leaderboard`)
+                                    }
+                                  >
+                                    Results
+                                  </Button>
+                                )}
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      disabled={deleting === round.id}
+                                    >
+                                      {deleting === round.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete {round.status === "FAILED" ? "Failed" : "Completed"} Round?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to delete this {round.status.toLowerCase()} round? This action cannot be undone and will permanently delete the round, all agent configurations, simulation results, and leaderboard data.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDeleteRound(round.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                        Delete
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )})}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Market Data Tab */}
+        <TabsContent value="data" className="space-y-6 mt-0">
+          <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -689,180 +1047,9 @@ export default function AdminPage() {
             </div>
           )}
         </CardContent>
-      </Card>
-
-      {/* Rounds Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>All Rounds</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {rounds.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No rounds yet. Create one to get started!
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Agents</TableHead>
-                  <TableHead>Seed</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rounds.map((round) => (
-                  <TableRow key={round.id}>
-                    <TableCell className="font-medium">{round.name}</TableCell>
-                    <TableCell>
-                      <RoundStatusBadge status={round.status} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        {round.agent_count}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {round.market_seed}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(round.created_at)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {round.status === "PENDING" && (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() => handleStartRound(round.id)}
-                              disabled={starting === round.id}
-                            >
-                              {starting === round.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Play className="h-4 w-4" />
-                              )}
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  disabled={deleting === round.id}
-                                >
-                                  {deleting === round.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Trash2 className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Delete Round?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you sure you want to delete this round? This action cannot be undone and will permanently delete the round and all associated agent data.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleDeleteRound(round.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                    Delete
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </>
-                        )}
-                        {round.status === "RUNNING" && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                disabled={stopping === round.id}
-                              >
-                                {stopping === round.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <>
-                                    <StopCircle className="h-4 w-4 mr-1" />
-                                    Force Stop
-                                  </>
-                                )}
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Force Stop Simulation?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to force stop this simulation? This will immediately terminate the running simulation and mark the round as completed with current results.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleStopRound(round.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                  Force Stop
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
-                        {round.status === "COMPLETED" && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                router.push(`/rounds/${round.id}/leaderboard`)
-                              }
-                            >
-                              Results
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  disabled={deleting === round.id}
-                                >
-                                  {deleting === round.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Trash2 className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Delete Completed Round?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you sure you want to delete this completed round? This action cannot be undone and will permanently delete the round, all agent configurations, simulation results, and leaderboard data.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleDeleteRound(round.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                    Delete
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

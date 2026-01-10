@@ -11,6 +11,9 @@ import type {
   Leaderboard,
   LeaderboardSortBy,
   UserRanking,
+  GlobalLeaderboard,
+  GlobalLeaderboardSortBy,
+  GlobalUserRanking,
   AuthVerify,
   RoundStatus,
   MarketDataStatus,
@@ -20,6 +23,7 @@ import type {
   MarketDataStats,
   MarketApiStatus,
   MarketDataDeleteResponse,
+  CompletedTradesResponse,
 } from '@/lib/types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -58,10 +62,16 @@ async function getAuthToken(): Promise<string | null> {
   return session.access_token
 }
 
+interface ApiCallOptions extends RequestInit {
+  /** Expected error status codes that should not throw (will return null instead) */
+  allowedErrors?: number[]
+}
+
 async function apiCall<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: ApiCallOptions = {}
 ): Promise<T> {
+  const { allowedErrors, ...fetchOptions } = options
   const token = await getAuthToken()
 
   // If no token and this is not a public endpoint, throw early
@@ -72,11 +82,11 @@ async function apiCall<T>(
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
-    ...options.headers,
+    ...fetchOptions.headers,
   }
 
   const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
+    ...fetchOptions,
     headers,
   })
 
@@ -85,9 +95,28 @@ async function apiCall<T>(
     let errorMessage = errorText
     try {
       const errorJson = JSON.parse(errorText)
-      errorMessage = errorJson.detail || errorText
+      // Handle FastAPI validation errors
+      if (errorJson.detail) {
+        if (Array.isArray(errorJson.detail)) {
+          // Pydantic validation errors
+          errorMessage = errorJson.detail.map((err: any) => 
+            `${err.loc.join('.')}: ${err.msg}`
+          ).join(', ')
+        } else if (typeof errorJson.detail === 'string') {
+          errorMessage = errorJson.detail
+        } else {
+          errorMessage = JSON.stringify(errorJson.detail)
+        }
+      } else {
+        errorMessage = JSON.stringify(errorJson)
+      }
     } catch {
       // Keep original error text
+    }
+    
+    // If this error status is expected, return null instead of throwing
+    if (allowedErrors?.includes(response.status)) {
+      return null as T
     }
     
     // Don't automatically sign out on 401 - the Supabase session may be valid
@@ -159,7 +188,10 @@ export const agents = {
     apiCall<Agent[]>(`/api/rounds/${roundId}/agents`),
 
   getMyAgent: (roundId: string) =>
-    apiCall<Agent>(`/api/rounds/${roundId}/agents/me`),
+    apiCall<Agent>(`/api/rounds/${roundId}/agents/me`, {
+      // 404 is expected when user hasn't created an agent for this round yet
+      allowedErrors: [404],
+    }),
 
   get: (roundId: string, agentId: string) =>
     apiCall<Agent>(`/api/rounds/${roundId}/agents/${agentId}`),
@@ -179,6 +211,16 @@ export const agents = {
     apiCall<Agent>(`/api/rounds/${roundId}/agents/${agentId}/results`),
 }
 
+// Trades API
+export const trades = {
+  /**
+   * Get completed trades with paired entry/exit for an agent.
+   * This is the recommended endpoint for displaying trade history.
+   */
+  getCompleted: (agentId: string) =>
+    apiCall<CompletedTradesResponse>(`/api/trades/agent/${agentId}/completed`),
+}
+
 // Leaderboard API
 export const leaderboard = {
   get: (roundId: string, sortBy: LeaderboardSortBy = 'sharpe_ratio', ascending = false) => {
@@ -193,6 +235,25 @@ export const leaderboard = {
   getMyRanking: (roundId: string, userId: string) =>
     apiCall<UserRanking>(
       `/api/rounds/${roundId}/leaderboard/me?user_id=${userId}`
+    ),
+
+  getGlobal: (
+    sortBy: GlobalLeaderboardSortBy = 'performance_score',
+    limit = 100,
+    offset = 0
+  ) => {
+    const params = new URLSearchParams()
+    params.append('sort_by', sortBy)
+    params.append('limit', limit.toString())
+    params.append('offset', offset.toString())
+    return apiCall<GlobalLeaderboard>(
+      `/api/leaderboard/global?${params.toString()}`
+    )
+  },
+
+  getMyGlobalRanking: (userId: string) =>
+    apiCall<GlobalUserRanking>(
+      `/api/leaderboard/global/me?user_id=${userId}`
     ),
 }
 
@@ -232,12 +293,13 @@ export const marketData = {
 export async function pollRoundStatus(
   roundId: string,
   onUpdate?: (status: RoundStatusResponse) => void,
-  intervalMs = 1000
+  intervalMs = 1500
 ): Promise<RoundStatusResponse> {
   const status = await rounds.getStatus(roundId)
   onUpdate?.(status)
 
-  if (status.status === 'COMPLETED') {
+  // Stop polling when simulation completes or fails
+  if (status.status === 'COMPLETED' || status.status === 'FAILED') {
     return status
   }
 
@@ -250,6 +312,7 @@ const api = {
   auth,
   rounds,
   agents,
+  trades,
   leaderboard,
   marketData,
   pollRoundStatus,
