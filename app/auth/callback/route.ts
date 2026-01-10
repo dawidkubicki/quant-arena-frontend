@@ -6,14 +6,17 @@ export async function GET(request: Request) {
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/'
 
+  // Use NEXT_PUBLIC_SITE_URL for production, fallback to origin for local dev
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || origin
+
   if (code) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`)
+      return NextResponse.redirect(`${siteUrl}${next}`)
     }
   }
 
   // Return to login page with error
-  return NextResponse.redirect(`${origin}/login?error=auth_callback_error`)
+  return NextResponse.redirect(`${siteUrl}/login?error=auth_callback_error`)
 }
