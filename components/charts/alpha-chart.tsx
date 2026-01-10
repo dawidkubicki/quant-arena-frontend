@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { createChart, ColorType, LineStyle, LineSeries } from "lightweight-charts"
+import { createChart, ColorType, LineStyle, LineSeries, Time } from "lightweight-charts"
 import type { ChartDataPoint } from "@/lib/types"
 
 interface AlphaChartProps {
@@ -25,7 +25,7 @@ function isValidTimestamp(timestamp: string | null | undefined): boolean {
 }
 
 // Helper to normalize data to chart format (with percentage conversion for alpha)
-function normalizeAlphaData(data: ChartDataPoint[] | number[]): { time: number; value: number }[] {
+function normalizeAlphaData(data: ChartDataPoint[] | number[]): { time: Time; value: number }[] {
   if (data.length === 0) return []
   
   if (isChartDataPointArray(data)) {
@@ -35,20 +35,20 @@ function normalizeAlphaData(data: ChartDataPoint[] | number[]): { time: number; 
     if (hasAllTimestamps) {
       // Use timestamps (converted to Unix seconds) for all points
       return data.map((point) => ({
-        time: Math.floor(new Date(point.timestamp!).getTime() / 1000),
+        time: Math.floor(new Date(point.timestamp!).getTime() / 1000) as Time,
         value: point.value * 100,
       }))
     } else {
       // Fall back to tick-based time for ALL points (synthetic data or mixed)
       return data.map((point, index) => ({
-        time: point.tick ?? index,
+        time: (point.tick ?? index) as Time,
         value: point.value * 100,
       }))
     }
   } else {
     // Legacy format: use index as time, number * 100 as percentage
     return (data as number[]).map((value, index) => ({
-      time: index,
+      time: index as Time,
       value: value * 100,
     }))
   }

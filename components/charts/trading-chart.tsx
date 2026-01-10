@@ -9,6 +9,7 @@ import {
   createSeriesMarkers,
   SeriesMarkerShape,
   SeriesMarkerPosition,
+  Time,
 } from "lightweight-charts"
 import type { Trade, ChartDataPoint } from "@/lib/types"
 
@@ -39,7 +40,7 @@ function hasAllValidTimestamps(data: ChartDataPoint[]): boolean {
 }
 
 // Helper to normalize data to chart format
-function normalizeChartData(data: ChartDataPoint[] | number[]): { time: number; value: number; useTimestamps: boolean }[] {
+function normalizeChartData(data: ChartDataPoint[] | number[]): { time: Time; value: number; useTimestamps: boolean }[] {
   if (data.length === 0) return []
   
   if (isChartDataPointArray(data)) {
@@ -49,14 +50,14 @@ function normalizeChartData(data: ChartDataPoint[] | number[]): { time: number; 
     if (useTimestamps) {
       // Use timestamps (converted to Unix seconds) for all points
       return data.map((point) => ({
-        time: Math.floor(new Date(point.timestamp!).getTime() / 1000),
+        time: Math.floor(new Date(point.timestamp!).getTime() / 1000) as Time,
         value: point.value,
         useTimestamps: true,
       }))
     } else {
       // Fall back to tick-based time for ALL points (synthetic data or mixed)
       return data.map((point, index) => ({
-        time: point.tick ?? index,
+        time: (point.tick ?? index) as Time,
         value: point.value,
         useTimestamps: false,
       }))
@@ -64,7 +65,7 @@ function normalizeChartData(data: ChartDataPoint[] | number[]): { time: number; 
   } else {
     // Legacy format: use index as time, number as value
     return (data as number[]).map((value, index) => ({
-      time: index,
+      time: index as Time,
       value,
       useTimestamps: false,
     }))
@@ -134,9 +135,9 @@ export function TradingChart({
       const useTimestamps = chartData.length > 0 && chartData[0].useTimestamps
       
       const markers = trades.map((trade) => {
-        // Determine if this is a buy or sell action
-        const isBuy = trade.action === "OPEN_LONG" || trade.action === "CLOSE_SHORT"
-        const isOpen = trade.action.includes("OPEN")
+        // Determine if this is a buy or sell action (long-only system)
+        const isBuy = trade.action === "OPEN_LONG"
+        const isOpen = trade.action === "OPEN_LONG"
 
         // Use different shapes for open vs close positions
         let shape: SeriesMarkerShape = "arrowUp"
