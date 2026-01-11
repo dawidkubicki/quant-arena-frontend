@@ -403,7 +403,7 @@ export default function RoundDetailPage() {
               </CardHeader>
               <CardContent className="p-3 sm:p-6 pt-0">
                 <div className="text-lg sm:text-2xl font-bold">
-                  {agent.result.sharpe_ratio?.toFixed(2) || "N/A"}
+                  {agent.result.sharpe_ratio !== null && agent.result.sharpe_ratio !== undefined && !isNaN(agent.result.sharpe_ratio) ? agent.result.sharpe_ratio.toFixed(2) : "N/A"}
                 </div>
               </CardContent>
             </Card>
@@ -431,20 +431,20 @@ export default function RoundDetailPage() {
                     <span className="text-xs sm:text-sm text-muted-foreground truncate">Alpha (Annual)</span>
                   </div>
                   <div className={`text-xl sm:text-3xl font-bold mt-1 ${
-                    agent.result.alpha !== null && agent.result.alpha > 0 
+                    agent.result.alpha !== null && !isNaN(agent.result.alpha) && agent.result.alpha > 0 
                       ? "text-green-500" 
-                      : agent.result.alpha !== null && agent.result.alpha < 0 
+                      : agent.result.alpha !== null && !isNaN(agent.result.alpha) && agent.result.alpha < 0 
                         ? "text-red-500" 
                         : ""
                   }`}>
-                    {agent.result.alpha !== null 
+                    {agent.result.alpha !== null && !isNaN(agent.result.alpha)
                       ? `${agent.result.alpha > 0 ? '+' : ''}${(agent.result.alpha * 100).toFixed(2)}%` 
                       : "N/A"}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {agent.result.alpha !== null && agent.result.alpha > 0 
+                    {agent.result.alpha !== null && !isNaN(agent.result.alpha) && agent.result.alpha > 0 
                       ? "Outperforming market on risk-adjusted basis" 
-                      : agent.result.alpha !== null && agent.result.alpha < 0 
+                      : agent.result.alpha !== null && !isNaN(agent.result.alpha) && agent.result.alpha < 0 
                         ? "Underperforming market on risk-adjusted basis"
                         : "Excess return vs SPY benchmark"}
                   </p>
@@ -457,14 +457,14 @@ export default function RoundDetailPage() {
                     <span className="text-xs sm:text-sm text-muted-foreground truncate">Beta</span>
                   </div>
                   <div className="text-xl sm:text-3xl font-bold mt-1 text-blue-500">
-                    {agent.result.beta?.toFixed(2) || "N/A"}
+                    {agent.result.beta !== null && agent.result.beta !== undefined && !isNaN(agent.result.beta) ? agent.result.beta.toFixed(2) : "N/A"}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {agent.result.beta !== null && agent.result.beta > 1.2 
+                    {agent.result.beta !== null && !isNaN(agent.result.beta) && agent.result.beta > 1.2 
                       ? "Aggressive - amplifies market moves" 
-                      : agent.result.beta !== null && agent.result.beta < 0.8 
+                      : agent.result.beta !== null && !isNaN(agent.result.beta) && agent.result.beta < 0.8 
                         ? "Defensive - fades market moves"
-                        : agent.result.beta !== null && Math.abs(agent.result.beta) < 0.2
+                        : agent.result.beta !== null && !isNaN(agent.result.beta) && Math.abs(agent.result.beta) < 0.2
                           ? "Market neutral strategy"
                           : "Market exposure relative to SPY"}
                   </p>

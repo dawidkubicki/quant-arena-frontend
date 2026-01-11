@@ -117,20 +117,24 @@ export function LeaderboardTable({ entries, currentUserId }: LeaderboardTablePro
               <div className="grid grid-cols-3 gap-2 text-center text-xs">
                 <div>
                   <div className="text-muted-foreground">Sharpe</div>
-                  <div className="font-mono font-medium">{entry.sharpe_ratio?.toFixed(2) || "N/A"}</div>
+                  <div className="font-mono font-medium">
+                    {entry.sharpe_ratio !== null && entry.sharpe_ratio !== undefined && !isNaN(entry.sharpe_ratio) ? entry.sharpe_ratio.toFixed(2) : "N/A"}
+                  </div>
                 </div>
                 <div>
                   <div className="text-muted-foreground">Alpha</div>
                   <div className={cn(
                     "font-mono font-medium",
-                    entry.alpha !== null && entry.alpha > 0 ? "text-green-500" : entry.alpha !== null && entry.alpha < 0 ? "text-red-500" : ""
+                    entry.alpha !== null && !isNaN(entry.alpha) && entry.alpha > 0 ? "text-green-500" : entry.alpha !== null && !isNaN(entry.alpha) && entry.alpha < 0 ? "text-red-500" : ""
                   )}>
-                    {entry.alpha !== null ? `${(entry.alpha * 100).toFixed(2)}%` : "N/A"}
+                    {entry.alpha !== null && !isNaN(entry.alpha) ? `${(entry.alpha * 100).toFixed(2)}%` : "N/A"}
                   </div>
                 </div>
                 <div>
                   <div className="text-muted-foreground">Beta</div>
-                  <div className="font-mono font-medium">{entry.beta?.toFixed(2) || "N/A"}</div>
+                  <div className="font-mono font-medium">
+                    {entry.beta !== null && entry.beta !== undefined && !isNaN(entry.beta) ? entry.beta.toFixed(2) : "N/A"}
+                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center text-xs mt-2">
@@ -231,18 +235,18 @@ export function LeaderboardTable({ entries, currentUserId }: LeaderboardTablePro
                     {formatPercent(entry.total_return)}
                   </TableCell>
                   <TableCell className="text-right font-mono">
-                    {entry.sharpe_ratio?.toFixed(2) || "N/A"}
+                    {entry.sharpe_ratio !== null && entry.sharpe_ratio !== undefined && !isNaN(entry.sharpe_ratio) ? entry.sharpe_ratio.toFixed(2) : "N/A"}
                   </TableCell>
                   <TableCell
                     className={cn(
                       "text-right font-mono",
-                      entry.alpha !== null && entry.alpha > 0 ? "text-green-500" : entry.alpha !== null && entry.alpha < 0 ? "text-red-500" : ""
+                      entry.alpha !== null && !isNaN(entry.alpha) && entry.alpha > 0 ? "text-green-500" : entry.alpha !== null && !isNaN(entry.alpha) && entry.alpha < 0 ? "text-red-500" : ""
                     )}
                   >
-                    {entry.alpha !== null ? `${(entry.alpha * 100).toFixed(2)}%` : "N/A"}
+                    {entry.alpha !== null && !isNaN(entry.alpha) ? `${(entry.alpha * 100).toFixed(2)}%` : "N/A"}
                   </TableCell>
                   <TableCell className="text-right font-mono">
-                    {entry.beta?.toFixed(2) || "N/A"}
+                    {entry.beta !== null && entry.beta !== undefined && !isNaN(entry.beta) ? entry.beta.toFixed(2) : "N/A"}
                   </TableCell>
                   <TableCell className="text-right font-mono text-red-500">
                     -{entry.max_drawdown.toFixed(2)}%

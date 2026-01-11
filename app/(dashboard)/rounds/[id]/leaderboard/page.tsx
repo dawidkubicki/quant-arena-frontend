@@ -101,7 +101,7 @@ export default function LeaderboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {leaderboard.best_sharpe?.toFixed(2) || "N/A"}
+              {leaderboard.best_sharpe !== null && leaderboard.best_sharpe !== undefined && !isNaN(leaderboard.best_sharpe) ? leaderboard.best_sharpe.toFixed(2) : "N/A"}
             </div>
           </CardContent>
         </Card>
@@ -125,8 +125,8 @@ export default function LeaderboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${leaderboard.best_alpha !== null && leaderboard.best_alpha > 0 ? 'text-green-500' : ''}`}>
-              {leaderboard.best_alpha !== null ? `${(leaderboard.best_alpha * 100).toFixed(2)}%` : "N/A"}
+            <div className={`text-2xl font-bold ${leaderboard.best_alpha !== null && !isNaN(leaderboard.best_alpha) && leaderboard.best_alpha > 0 ? 'text-green-500' : ''}`}>
+              {leaderboard.best_alpha !== null && !isNaN(leaderboard.best_alpha) ? `${(leaderboard.best_alpha * 100).toFixed(2)}%` : "N/A"}
             </div>
           </CardContent>
         </Card>

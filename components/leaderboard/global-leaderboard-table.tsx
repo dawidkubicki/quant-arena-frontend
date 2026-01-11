@@ -272,7 +272,7 @@ export function GlobalLeaderboardTable({ entries, currentUserId }: GlobalLeaderb
                 <div className="text-center p-2 rounded bg-muted/50">
                   <div className="text-xs text-muted-foreground mb-1">Avg Sharpe</div>
                   <div className="font-mono font-semibold text-sm">
-                    {entry.avg_sharpe_ratio?.toFixed(2) || "N/A"}
+                    {entry.avg_sharpe_ratio !== null && entry.avg_sharpe_ratio !== undefined && !isNaN(entry.avg_sharpe_ratio) ? entry.avg_sharpe_ratio.toFixed(2) : "N/A"}
                   </div>
                 </div>
                 <div className="text-center p-2 rounded bg-muted/50">
@@ -294,9 +294,9 @@ export function GlobalLeaderboardTable({ entries, currentUserId }: GlobalLeaderb
                   <div className="text-xs text-muted-foreground mb-1">Avg Alpha</div>
                   <div className={cn(
                     "font-mono font-semibold text-sm",
-                    entry.avg_alpha !== null && entry.avg_alpha > 0 ? "text-green-500" : entry.avg_alpha !== null && entry.avg_alpha < 0 ? "text-red-500" : ""
+                    entry.avg_alpha !== null && !isNaN(entry.avg_alpha) && entry.avg_alpha > 0 ? "text-green-500" : entry.avg_alpha !== null && !isNaN(entry.avg_alpha) && entry.avg_alpha < 0 ? "text-red-500" : ""
                   )}>
-                    {entry.avg_alpha !== null ? `${(entry.avg_alpha * 100).toFixed(1)}%` : "N/A"}
+                    {entry.avg_alpha !== null && !isNaN(entry.avg_alpha) ? `${(entry.avg_alpha * 100).toFixed(1)}%` : "N/A"}
                   </div>
                 </div>
               </div>
@@ -389,7 +389,7 @@ export function GlobalLeaderboardTable({ entries, currentUserId }: GlobalLeaderb
                     {entry.performance_score.toFixed(1)}
                   </TableCell>
                   <TableCell className="text-right font-mono">
-                    {entry.avg_sharpe_ratio?.toFixed(2) || "N/A"}
+                    {entry.avg_sharpe_ratio !== null && entry.avg_sharpe_ratio !== undefined && !isNaN(entry.avg_sharpe_ratio) ? entry.avg_sharpe_ratio.toFixed(2) : "N/A"}
                   </TableCell>
                   <TableCell
                     className={cn(
@@ -402,10 +402,10 @@ export function GlobalLeaderboardTable({ entries, currentUserId }: GlobalLeaderb
                   <TableCell
                     className={cn(
                       "text-right font-mono",
-                      entry.avg_alpha !== null && entry.avg_alpha > 0 ? "text-green-500" : entry.avg_alpha !== null && entry.avg_alpha < 0 ? "text-red-500" : ""
+                      entry.avg_alpha !== null && !isNaN(entry.avg_alpha) && entry.avg_alpha > 0 ? "text-green-500" : entry.avg_alpha !== null && !isNaN(entry.avg_alpha) && entry.avg_alpha < 0 ? "text-red-500" : ""
                     )}
                   >
-                    {entry.avg_alpha !== null ? `${(entry.avg_alpha * 100).toFixed(2)}%` : "N/A"}
+                    {entry.avg_alpha !== null && !isNaN(entry.avg_alpha) ? `${(entry.avg_alpha * 100).toFixed(2)}%` : "N/A"}
                   </TableCell>
                   <TableCell className="text-right font-mono">
                     {entry.win_rate.toFixed(1)}%

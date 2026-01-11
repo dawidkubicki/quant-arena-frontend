@@ -404,6 +404,7 @@ export interface GlobalLeaderboard {
   total_rounds_analyzed: number
   highest_avg_sharpe: number
   highest_avg_return: number
+  highest_avg_alpha: number | null
   most_rounds_participated: number
 }
 
